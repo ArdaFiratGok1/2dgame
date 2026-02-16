@@ -48,6 +48,14 @@ function preload() {
     
     // Eğer zemin görselin varsa burayı aç:
     // this.load.image('ground', 'assets/ground.png');
+
+    this.load.image(
+    'portal',
+    'assets/portal/portal.png'
+  );
+
+  this.load.image('npc1', 'assets/npc/npc1.png');
+
 }
 
 function create() {
@@ -302,7 +310,7 @@ function checkInteractions() {
 function startDialogue(npc) {
     isTalking = true;
     npc.given = true; // Hediye alındı
-    npc.setFillStyle(0x555555); // Rengi solsun
+    npc.setTint(0x999999);//griye çevir
     
     giftCount++;
     giftText.setText('Gifts: ' + giftCount);
@@ -346,23 +354,34 @@ function createPlatform(scene, x, y, width, height, color) {
 }
 
 function createNPC(scene, x, y, message, giftType) {
-    const npc = scene.add.rectangle(x, y, 32, 48, 0x00ff00);
-    scene.physics.add.existing(npc, true);
+    const npc = scene.physics.add.staticSprite(x, y, 'npc1');
+    npc.y += 40; // Görselin altını yere hizalamak için ince ayar
+
+    npc.setOrigin(0.5, 1); // AYAKLARI YERE BASAR
+    npc.body.setSize(20, 40); // hitbox
+    npc.body.setOffset(6, 8);
+
     npc.message = message;
     npc.giftType = giftType;
     npc.given = false;
+
     npcs.add(npc);
 }
 
 function createPortal(scene, x, y, targetLevel) {
-    const portal = scene.add.rectangle(x, y, 50, 80, 0x9370DB);
-    scene.physics.add.existing(portal, true);
+    // 🔁 ARTIK rectangle DEĞİL, sprite kullanıyoruz
+    const portal = scene.physics.add.staticSprite(x, y, 'portal');
+    portal.setOrigin(0.5, 1); // ALTINDAN HİZALA
+portal.y += 50;           // İNCE AYAR (istersen 3–10 arası dene)
+
+    // 🔧 Hitbox ayarı (çok önemli)
+    portal.body.setSize(32, 64);
+    portal.body.setOffset(0, 0);
+
     portal.targetLevel = targetLevel;
     portal.used = false;
-    portals.add(portal);
 
-    // Portal Süsü (Yazı)
-    scene.add.text(x, y - 60, '🚪', { fontSize: '30px' }).setOrigin(0.5);
+    portals.add(portal);
 }
 
 function createCheckpoint(scene, x, y) {
