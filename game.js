@@ -18,14 +18,21 @@ let gameFinished = false;
 
 const config = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 450,
+    // Ekran boyutlarını pencere boyutuna eşitle
+    width: window.innerWidth, 
+    height: window.innerHeight,
     backgroundColor: '#87CEEB',
+    scale: {
+        // Oyunun ekrana sığmasını sağlayan mod
+        mode: Phaser.Scale.FIT,
+        // Oyunu hem yatay hem dikeyde ortala
+        autoCenter: Phaser.Scale.CENTER_BOTH
+    },
     physics: {
         default: 'arcade',
         arcade: {
             gravity: { y: 1000 },
-            debug: false
+            debug: true
         }
     },
     scene: {
@@ -43,24 +50,18 @@ let currentScene;
 let nearbyInteractive = null; // Yanında durduğumuz obje (NPC veya Portal)
 
 function preload() {
-    // 16x16 çizdiysen frameWidth: 16 yap, 32 ise 32 kalsın.
     this.load.spritesheet('player', 'assets/player/player.png', { frameWidth: 32, frameHeight: 32 });
-    
-    // Eğer zemin görselin varsa burayı aç:
-    // this.load.image('ground', 'assets/ground.png');
-
-    this.load.image(
-    'portal',
-    'assets/portal/portal.png'
-  );
-
-  this.load.image('npc1', 'assets/npc/npc1.png');
-
+    this.load.image('portal', 'assets/portal/portal.png');
+    this.load.image('npc1', 'assets/npc/npc1.png');
+    this.load.image('longWood', 'assets/platforms/long_wood.png');
+    this.load.image('middleWood', 'assets/platforms/middle_wood.png');
+    this.load.image('shortWood', 'assets/platforms/short_wood.png');
+    this.load.image('skyBg', 'assets/background/skyBg.png');
 }
 
 function create() {
     currentScene = this;
-
+    
     // Animasyonlar
     if (!this.anims.exists('walk')) {
         this.anims.create({
@@ -83,156 +84,115 @@ function create() {
     interactKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
 
-    // UI - Hediye Sayacı
+    // UI Elemanları
     giftText = this.add.text(16, 16, 'Gifts: ' + giftCount, { 
         fontSize: '20px', fill: '#fff', backgroundColor: '#000000aa', padding: { x: 10, y: 5 }
     }).setScrollFactor(0).setDepth(100);
 
-    // UI - "E'ye Bas" Uyarısı (Başta gizli)
     promptText = this.add.text(400, 300, '[E] Etkileşime Geç', {
         fontSize: '16px', fill: '#ffff00', backgroundColor: '#000', padding: { x: 5, y: 2 }
     }).setOrigin(0.5).setScrollFactor(0).setDepth(100).setVisible(false);
 
-    // UI - Diyalog Kutusu (Başta gizli)
     createDialogueBox(this);
 
-    // Bölümü Başlat
+    // Bölümü Başlat (Oyuncu burada oluşuyor)
     setupLevel(this, currentLevel);
+
+    window.addEventListener('resize', () => {
+        this.scale.resize(window.innerWidth, window.innerHeight);
+    });
 }
 
 function setupLevel(scene, level) {
-    // Eski objeleri temizle
     if (platforms) platforms.clear(true, true);
     if (npcs) npcs.clear(true, true);
-    if (portals) portals.clear(true, true); // Portalları da temizle
+    if (portals) portals.clear(true, true);
+let bg = scene.add.image(window.innerWidth / 2, window.innerHeight / 2, 'skyBg'); 
+    
+    // Görseli tarayıcının o anki genişlik ve yüksekliğine zorla
+    bg.setDisplaySize(window.innerWidth, window.innerHeight);
+    
+    bg.setScrollFactor(0); // Kamera ilerlese de arka plan takip etmesin, sabit kalsın
+    bg.setDepth(-1);       // En arkada dursun
     checkpoints = [];
 
-    // Yeni Gruplar
     platforms = scene.physics.add.staticGroup();
     npcs = scene.physics.add.staticGroup();
-    portals = scene.physics.add.staticGroup(); // Portallar için grup
+    portals = scene.physics.add.staticGroup();
 
-    // DÜNYA SINIRLARI - ÖNEMLİ DEĞİŞİKLİK
-    // Genişlik: 2000 (Daha uzun parkur)
-    // checkCollision.down = false yaptık. Böylece oyuncu aşağı düşünce zemine çarpmaz, düşmeye devam eder ve ölür.
     scene.physics.world.setBounds(0, 0, 2000, 600);
     scene.physics.world.checkCollision.down = false; 
     scene.cameras.main.setBounds(0, 0, 2000, 600);
 
-    // ---------------------------------------------------------
-    // 🎮 LEVEL 1: Öğretici (Daha geniş)
-    // ---------------------------------------------------------
     if (level === 1) {
         scene.cameras.main.setBackgroundColor('#87CEEB'); 
-        
-        // Başlangıç Zemini
-        createPlatform(scene, 200, 500, 400, 40, 0x6B8E23);
+        createLongWood(scene, 200, 500);
+        createMiddleWood(scene, 450, 420);
+        createShortWood(scene, 650, 360);
+        createMiddleWood(scene, 850, 300);
+        createLongWood(scene, 1100, 500);
 
-        // Boşluklu Parkur
-        createPlatform(scene, 600, 450, 150, 20, 0x8B4513); // İlk atlama
-        createPlatform(scene, 850, 400, 150, 20, 0x8B4513); // İkinci atlama (Yüksek)
-        createPlatform(scene, 1100, 500, 400, 40, 0x6B8E23); // Güvenli alan (NPC burada)
-
-        // NPC 1 (Uzakta)
         createNPC(scene, 1150, 440, '🎩 Merhaba!\nBu senin ilk hediyen.\n(Devam etmek için ENTER\'a bas)', 'hat');
 
-        // Portal (En sonda)
-        createPlatform(scene, 1400, 450, 100, 20, 0x8B4513);
-        createPlatform(scene, 1600, 500, 200, 40, 0x6B8E23); // Portal zemini
-        createPortal(scene, 1650, 430, 2); // Portal burada
+        createShortWood(scene, 1400, 450, 100, 20, 0x8B4513);
+        createLongWood(scene, 1600, 500, 200, 40, 0x6B8E23);
+        createPortal(scene, 1650, 430, 2);
 
-        // Oyuncu Başlangıç
         playerReset(scene, 100, 400);
     }
-    // ---------------------------------------------------------
-    // 🎮 LEVEL 2: Yüksek Zıplamalar
-    // ---------------------------------------------------------
     else if (level === 2) {
         scene.cameras.main.setBackgroundColor('#FFA07A'); 
-
-        // Başlangıç
-        createPlatform(scene, 100, 500, 200, 40, 0x8B4513);
+        createLongWood(scene, 100, 500, 200, 40, 0x8B4513);
         createCheckpoint(scene, 100, 440);
-
-        // Merdiven gibi yükselen parkur
-        createPlatform(scene, 350, 450, 100, 20, 0xA0522D);
-        createPlatform(scene, 550, 380, 100, 20, 0xA0522D);
-        createPlatform(scene, 750, 300, 100, 20, 0xA0522D);
-        
-        // Uzun bir düzlük (NPC burada)
-        createPlatform(scene, 1000, 300, 300, 20, 0xA0522D);
+        createShortWood(scene, 350, 450, 100, 20, 0xA0522D);
+        createShortWood(scene, 550, 380, 100, 20, 0xA0522D);
+        createShortWood(scene, 750, 300, 100, 20, 0xA0522D);
+        createLongWood(scene, 1000, 300, 300, 20, 0xA0522D);
         createNPC(scene, 1050, 240, '🐱 İşte tatlı bir kedi!\nYanında götür.\n(Devam etmek için ENTER\'a bas)', 'cat');
-        
-
-        // Aşağı inen zor parkur
-        createPlatform(scene, 1300, 380, 80, 20, 0xA0522D);
-        createPlatform(scene, 1500, 450, 80, 20, 0xA0522D);
-        
-        // Portal Çıkışı
-        createPlatform(scene, 1800, 500, 200, 40, 0x8B4513);
+        createShortWood(scene, 1300, 380, 80, 20, 0xA0522D);
+        createShortWood(scene, 1500, 450, 80, 20, 0xA0522D);
+        createLongWood(scene, 1800, 500, 200, 40, 0x8B4513);
         createPortal(scene, 1850, 430, 3);
-
         playerReset(scene, 100, 400);
     }
-    // ---------------------------------------------------------
-    // 🎮 LEVEL 3: Final
-    // ---------------------------------------------------------
     else if (level === 3) {
         scene.cameras.main.setBackgroundColor('#9370DB'); 
-
-        createPlatform(scene, 100, 500, 200, 40, 0x483D8B);
+        createLongWood(scene, 100, 500, 200, 40, 0x483D8B);
         createCheckpoint(scene, 100, 440);
-
-        // Zorlu tek bloklar
-        createPlatform(scene, 400, 500, 80, 20, 0x6A5ACD);
-        createPlatform(scene, 600, 450, 80, 20, 0x6A5ACD);
-        createPlatform(scene, 800, 400, 80, 20, 0x6A5ACD);
-        createPlatform(scene, 1000, 350, 80, 20, 0x6A5ACD);
-
-        // Final Pastası Platformu
-        createPlatform(scene, 1400, 500, 400, 40, 0x483D8B);
-
-        // 🎂 PASTA (Sadece görüntü, çarpışma yok)
+        createShortWood(scene, 400, 500, 80, 20, 0x6A5ACD);
+        createShortWood(scene, 600, 450, 80, 20, 0x6A5ACD);
+        createShortWood(scene, 800, 400, 80, 20, 0x6A5ACD);
+        createShortWood(scene, 1000, 350, 80, 20, 0x6A5ACD);
+        createLongWood(scene, 1400, 500, 400, 40, 0x483D8B);
         const cake = scene.add.text(1400, 430, '🎂', { fontSize: '60px' }).setOrigin(0.5);
-        
-        // Gizli bitiş tetikleyicisi (Pastanın üzerine gelince)
         const finisher = scene.add.rectangle(1400, 450, 50, 50, 0x000000, 0);
         scene.physics.add.existing(finisher, true);
         scene.physics.add.overlap(player, finisher, () => {
              if (!gameFinished) showFinalMessage(scene);
         });
-
         playerReset(scene, 100, 400);
     }
 
-    // Fizik İlişkileri
     scene.physics.add.collider(player, platforms);
-    scene.cameras.main.startFollow(player, true, 0.1, 0.1);
-
-    // Çarpışmalar (Overlap yerine artık kontrol yapıyoruz)
     scene.physics.add.overlap(player, checkpoints, activateCheckpoint, null, scene);
+
+    
 }
 
 function update() {
-    // 1. Durum Kontrolleri
     if (isRespawning || gameFinished) return;
 
-    // Diyalogdaysak hareket edemeyiz
     if (isTalking) {
         player.setVelocityX(0);
         player.anims.play('idle', true);
-        
-        // ENTER'a basınca diyaloğu kapat
         if (Phaser.Input.Keyboard.JustDown(enterKey)) {
             closeDialogue();
         }
-        return; // Aşağıdaki hareket kodlarını çalıştırma
+        return;
     }
 
-    // 2. Etkileşim Kontrolü (Sürekli yakındakileri tara)
     checkInteractions();
 
-    // E Tuşuna basılınca ne olacak?
     if (Phaser.Input.Keyboard.JustDown(interactKey) && nearbyInteractive) {
         if (nearbyInteractive.type === 'npc') {
             startDialogue(nearbyInteractive.obj);
@@ -241,7 +201,6 @@ function update() {
         }
     }
 
-    // 3. Hareket Kodları
     player.body.setVelocityX(0);
 
     if (cursors.left.isDown) {
@@ -262,22 +221,15 @@ function update() {
         player.body.setVelocityY(-550);
     }
 
-    // 4. Düşme ve Ölme (Koordinat 600'ü geçerse)
     if (player.y > 650) {
         respawnPlayer(currentScene);
     }
 }
 
-// ═══════════════════════════════════════════
-// 🛠️ YARDIMCI FONKSİYONLAR (GÜNCELLENDİ)
-// ═══════════════════════════════════════════
-
 function checkInteractions() {
-    // Önce kimseye yakın değiliz varsayalım
     nearbyInteractive = null;
     promptText.setVisible(false);
 
-    // NPC Kontrolü
     let closestNPC = null;
     npcs.getChildren().forEach(npc => {
         if (Phaser.Math.Distance.Between(player.x, player.y, npc.x, npc.y) < 80) {
@@ -289,10 +241,9 @@ function checkInteractions() {
         nearbyInteractive = { type: 'npc', obj: closestNPC };
         promptText.setText('[E] Konuş');
         promptText.setVisible(true);
-        return; // Bir şey bulduk, çıkalım
+        return;
     }
 
-    // Portal Kontrolü
     let closestPortal = null;
     portals.getChildren().forEach(portal => {
         if (Phaser.Math.Distance.Between(player.x, player.y, portal.x, portal.y) < 60) {
@@ -309,12 +260,10 @@ function checkInteractions() {
 
 function startDialogue(npc) {
     isTalking = true;
-    npc.given = true; // Hediye alındı
-    npc.setTint(0x999999);//griye çevir
-    
+    npc.given = true; 
+    npc.setTint(0x999999);
     giftCount++;
     giftText.setText('Gifts: ' + giftCount);
-
     dialogueBox.visible = true;
     dialogueText.setText(npc.message);
     dialogueText.visible = true;
@@ -330,15 +279,9 @@ function closeDialogue() {
 function usePortal(scene, portal) {
     if (portal.used) return;
     portal.used = true;
-
-    // Oyuncuyu dondur
     player.setVelocity(0, 0);
-    isRespawning = true; // Hareket etmesini engellemek için bu flag'i kullanıyoruz
-
-    // Ekran Karartma (Fade Out)
+    isRespawning = true;
     scene.cameras.main.fadeOut(1000, 0, 0, 0);
-
-    // Kararma bitince level değiştir
     scene.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, (cam, effect) => {
         currentLevel = portal.targetLevel;
         setupLevel(scene, currentLevel);
@@ -355,32 +298,20 @@ function createPlatform(scene, x, y, width, height, color) {
 
 function createNPC(scene, x, y, message, giftType) {
     const npc = scene.physics.add.staticSprite(x, y, 'npc1');
-    npc.y += 40; // Görselin altını yere hizalamak için ince ayar
-
-    npc.setOrigin(0.5, 1); // AYAKLARI YERE BASAR
-    npc.body.setSize(20, 40); // hitbox
-    npc.body.setOffset(6, 8);
-
+    npc.setOrigin(0.5, 1);
+    npc.body.setSize(20, 40);
     npc.message = message;
     npc.giftType = giftType;
     npc.given = false;
-
     npcs.add(npc);
 }
 
 function createPortal(scene, x, y, targetLevel) {
-    // 🔁 ARTIK rectangle DEĞİL, sprite kullanıyoruz
     const portal = scene.physics.add.staticSprite(x, y, 'portal');
-    portal.setOrigin(0.5, 1); // ALTINDAN HİZALA
-portal.y += 50;           // İNCE AYAR (istersen 3–10 arası dene)
-
-    // 🔧 Hitbox ayarı (çok önemli)
+    portal.setOrigin(0.5, 1);
     portal.body.setSize(32, 64);
-    portal.body.setOffset(0, 0);
-
     portal.targetLevel = targetLevel;
     portal.used = false;
-
     portals.add(portal);
 }
 
@@ -403,14 +334,15 @@ function activateCheckpoint(player, cp) {
 function playerReset(scene, x, y) {
     if (!player) {
         player = scene.physics.add.sprite(x, y, 'player');
-        player.setCollideWorldBounds(false); // DÜNYA SINIRINA ÇARPMASIN, DÜŞEBİLSİN
-        player.body.setSize(20, 32); // Hitbox'ı biraz daralttım, daha rahat hareket etsin
+        player.setCollideWorldBounds(false);
+        player.body.setSize(20, 32);
+        player.setDepth(10);
     } else {
         player.setPosition(x, y);
         player.setVelocity(0, 0);
         player.setVisible(true);
-        player.setFlipX(false);
     }
+    scene.cameras.main.startFollow(player, true, 0.1, 0.1);
     checkpointX = x;
     checkpointY = y;
     isRespawning = false;
@@ -421,7 +353,6 @@ function respawnPlayer(scene) {
     isRespawning = true;
     player.setVisible(false);
     player.setVelocity(0, 0);
-
     scene.time.delayedCall(1000, () => {
         player.setPosition(checkpointX, checkpointY);
         player.setVisible(true);
@@ -431,7 +362,6 @@ function respawnPlayer(scene) {
 }
 
 function createDialogueBox(scene) {
-    // Siyah kutu
     dialogueBox = scene.add.graphics().setScrollFactor(0).setDepth(200);
     dialogueBox.fillStyle(0x000000, 0.9);
     dialogueBox.fillRect(50, 340, 700, 100);
@@ -439,7 +369,6 @@ function createDialogueBox(scene) {
     dialogueBox.strokeRect(50, 340, 700, 100);
     dialogueBox.visible = false;
 
-    // Yazı
     dialogueText = scene.add.text(400, 390, '', { 
         fontSize: '20px', fill: '#fff', align: 'center', wordWrap: { width: 680 }
     }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
@@ -453,4 +382,43 @@ function showFinalMessage(scene) {
     scene.add.text(400, 225, '🎉 Happy Birthday! 🎉\n\nOyunu bitirdin!', { 
         fontSize: '32px', fill: '#fff', align: 'center' 
     }).setOrigin(0.5).setScrollFactor(0).setDepth(301);
+}
+
+function createLongWood(scene, x, y) {
+    const p = scene.physics.add.staticImage(x, y, 'longWood');
+    p.setOrigin(0.5, 1);
+    p.body.updateFromGameObject();
+
+    // Platformu 2 kat genişletmek ve 1.5 kat uzatmak istersen:
+    p.setScale(2, 1.5); 
+    
+    // ÖNEMLİ: Fizik kutusunu yeni boyuta göre günceller
+    p.refreshBody();
+    platforms.add(p);
+}
+
+function createMiddleWood(scene, x, y) {
+    const p = scene.physics.add.staticImage(x, y, 'middleWood');
+    p.setOrigin(0.5, 1);
+    p.body.updateFromGameObject();
+
+    // Platformu 2 kat genişletmek ve 1.5 kat uzatmak istersen:
+    p.setScale(2, 1.5); 
+    
+    // ÖNEMLİ: Fizik kutusunu yeni boyuta göre günceller
+    p.refreshBody();
+    platforms.add(p);
+}
+
+function createShortWood(scene, x, y) {
+    const p = scene.physics.add.staticImage(x, y, 'shortWood');
+    p.setOrigin(0.5, 1);
+    p.body.updateFromGameObject();
+
+    // Platformu 2 kat genişletmek ve 1.5 kat uzatmak istersen:
+    p.setScale(2, 1.5); 
+    
+    // ÖNEMLİ: Fizik kutusunu yeni boyuta göre günceller
+    p.refreshBody();
+    platforms.add(p);
 }
